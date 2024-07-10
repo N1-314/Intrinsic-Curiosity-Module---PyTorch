@@ -56,9 +56,10 @@ Linux 환경에서 개발하였습니다.
 1. PyTorch 버전에 관한 가이드가 있나요?
 
     : 모르겠네요. 일단 제 GPU에 맞췄습니다. CUDA Version이 11.4라, 그에 해당하는 버전으로 설치했습니다. 이 레포의 초기 버전이 PyTorch v2.1.1에서도 실행되는 것을 확인한 적이 있습니다. 마음껏 선택하세요.
-
+1. 여러분. 이건 테스트용입니다.
 
 
 ### references
 
 - pytorch.org - [Train a Mario-playing RL Agent](https://pytorch.org/tutorials/intermediate/mario_rl_tutorial.html)
+
