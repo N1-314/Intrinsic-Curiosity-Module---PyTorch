@@ -9,8 +9,14 @@ from gym_super_mario_bros.actions import (COMPLEX_MOVEMENT, RIGHT_ONLY,
 from nes_py.wrappers import JoypadSpace
 
 from utils import array_to_image, create_video
+from wrappers_icm_specific import GrayScaleObservation
 
 warnings.filterwarnings("ignore", category=UserWarning)
+
+
+## Variables
+color_env = True
+save_video = True
 
 
 ## Initialize Super Mario environment
@@ -21,9 +27,16 @@ else:
                 #    render_mode='human', 
                    apply_api_compatibility=True,
                    )
-env = JoypadSpace(env, COMPLEX_MOVEMENT)
-env = FrameStack(env, num_stack=4)  # next_state will be changed from 'numpy.ndarray' (h,w,c) to 'LazyFrames' (num_stack,h,w,c)
+env = JoypadSpace(env, COMPLEX_MOVEMENT)    # "we reparametrize the action space of the agent into 14 unique actions"
+if not color_env:
+    env = GrayScaleObservation(env, keep_dim=False)     # "The input RGB images are converted into gray-scale"
+env = FrameStack(env, num_stack=4)  # "by concatenating the current frame with the three previous frames"
 
+"""
+TODO - wrappers
+ : ResizeObservation(env, shape=42) 'The input RGB images are re-sized to 42 x 42.'
+ : SkipFrame() 'we use action repeat of four during training time in VizDoom and action repeat of six in Mario.'
+"""
 
 ## Check the output from environment
 state, info = env.reset()
@@ -48,7 +61,6 @@ elif isinstance(state, gym.wrappers.frame_stack.LazyFrames):
 
 
 ## How to save video - 1
-save_video = True
 if save_video:
     frames = []
 
@@ -92,5 +104,5 @@ env.close()
 
 # How to save video - 2
 if save_video:
-    create_video(frames, 'output.mp4', fps=20)
+    create_video(frames, 'output.mp4', fps=20, is_color=color_env)
     
