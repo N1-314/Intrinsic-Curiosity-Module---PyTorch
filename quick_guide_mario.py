@@ -3,13 +3,12 @@ import warnings
 
 import gym
 import numpy as np
-from gym.wrappers import FrameStack
+from gym.wrappers import FrameStack, GrayScaleObservation, ResizeObservation
 from gym_super_mario_bros.actions import (COMPLEX_MOVEMENT, RIGHT_ONLY,
                                           SIMPLE_MOVEMENT)
 from nes_py.wrappers import JoypadSpace
 
 from utils import array_to_image, create_video
-from wrappers_icm_specific import GrayScaleObservation
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -30,11 +29,11 @@ else:
 env = JoypadSpace(env, COMPLEX_MOVEMENT)    # "we reparametrize the action space of the agent into 14 unique actions"
 if not color_env:
     env = GrayScaleObservation(env, keep_dim=False)     # "The input RGB images are converted into gray-scale"
+env = ResizeObservation(env, shape=42)
 env = FrameStack(env, num_stack=4)  # "by concatenating the current frame with the three previous frames"
 
 """
 TODO - wrappers
- : ResizeObservation(env, shape=42) 'The input RGB images are re-sized to 42 x 42.'
  : SkipFrame() 'we use action repeat of four during training time in VizDoom and action repeat of six in Mario.'
 """
 

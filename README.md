@@ -13,6 +13,10 @@ Linux 환경에서 개발하였습니다.
 
         pip install gym-super-mario-bros
     
+- OpenCV 설치
+
+        conda install opencv
+
 - Pytorch 설치
     
         conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
@@ -35,15 +39,19 @@ Linux 환경에서 개발하였습니다.
     
     1. action space에 관하여 - `gym_super_mario_bros.actions`
 
-        : [action의 종류](https://github.com/Kautenja/gym-super-mario-bros/blob/master/gym_super_mario_bros/actions.py)에서, `RIGHT_ONLY`는 5개, `SIMPLE_MOVEMENT`는 7개, `COMPLEX_MOVEMENT`는 14개의 action입니다.
+        : [action의 종류](https://github.com/Kautenja/gym-super-mario-bros/blob/master/gym_super_mario_bros/actions.py)에서, `RIGHT_ONLY`는 5개, `SIMPLE_MOVEMENT`는 7개, `COMPLEX_MOVEMENT`는 12개의 action입니다.
 
     1. 각종 wrapper들
 
         1. `nes_py.wrappers.JoypadSpace` : integer action을 조이패드 input으로 변환한다. nes_py 환경에서 action이 잘 먹히도록 한다.
         1. `gym.wrappers.FrameStack` : 논문에서 최근 4개 frame을 연결하여 state로 사용하였다.
-        1. `wrappers_icm_specific.GrayScaleObservation` : 논문에서 RGB image를 흑백 image로 변환하여 사용하였다.
-        1. `ResizeObservation` : 논문에서 image를 42x42로 변환하여 사용하였다.
+        1. `gym.wrappers.GrayScaleObservation` : 논문에서 RGB image를 흑백 image로 변환하여 사용하였다.
+        1. `gym.wrappers.ResizeObservation` : 논문에서 image를 42x42로 변환하여 사용하였다.
         1. `SkipFrame` : 논문에서 training 과정에서 VizDoom은 4번, Mario는 6번동안 한 action을 반복하도록 하였다 (TAS 플레이 방지). 하지만 inference 시에는 이 제한을 두지 않았다!
+
+    1. `gym.wrappers`를 사용하는데 NumPy 관련 에러가 자꾸 발생해요
+        
+        : NumPy 버전을 의심해보세요. 2024년 초에 NumPy v2.0이 배포되었는데, 이건 너무 최근입니다. gym wrappers는 2022년 10월에 마지막으로 업데이트되었습니다. 일단 NumPy v1.24에서는 이 레포가 잘 작동합니다!
 
 1. 왜 `gymnasium`을 사용하지 않고 `gym`을 사용하나요?
 
