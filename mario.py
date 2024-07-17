@@ -10,6 +10,7 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+
 def create_mario(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_video = True):
     gray_scale = not color_env
     ## Initialize Super Mario environment
@@ -25,7 +26,6 @@ def create_mario(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_video
     env = ResizeObservation(env, shape=42) # ndim을 3으로 만들기에 GrayScale이전에 사용
     if gray_scale:
         env = GrayScaleObservation(env, keep_dim=False)     # "The input RGB images are converted into gray-scale"
-    # env = FrameStack(env, num_stack=4) # copy적용이 안되어있는 FrameStack # "by concatenating the current frame with the three previous frames"
     env = SkipStackObservation(env, num_skip=6, num_stack=4)
 
     return env
@@ -38,7 +38,7 @@ class RecordFrames(gym.Wrapper):
     def step(self, action):
         observation, reward, terminated, truncated, info = self.env.step(action)
         self.record_frames.append(observation.copy())
-        # info['record'] = LazyFrames(self.record_frames)
+        info['n_frames'] = len(self.record_frames)
 
         return observation, reward, terminated, truncated, info
     
@@ -46,7 +46,6 @@ class RecordFrames(gym.Wrapper):
         observation, info = self.env.reset(**kwargs)
         self.record_frames.clear()
         self.record_frames.append(observation.copy())
-        # info['record'] = LazyFrames(self.record_frames)
 
         return observation, info
     
@@ -55,7 +54,7 @@ class RecordFrames(gym.Wrapper):
         print(f'[save video] saved: {name}, frames length: {len(self.record_frames)}, fps: {fps}')
 
 
-class SkipStackObservation(gym.ObservationWrapper): # env_wrapper.BufferedObsEnv
+class SkipStackObservation(gym.ObservationWrapper):
     def __init__(self, env: gym.Env, num_skip=6, num_stack=4):
         super().__init__(env)
         self.num_skip = num_skip
@@ -63,14 +62,17 @@ class SkipStackObservation(gym.ObservationWrapper): # env_wrapper.BufferedObsEnv
 
         self.frames = deque(maxlen=num_stack)
 
-        low = np.repeat(self.observation_space.low[np.newaxis, ...], num_stack, axis=0)
-        high = np.repeat(self.observation_space.high[np.newaxis, ...], num_stack, axis=0)
-        self.observation_space = Box(low=low, high=high, dtype=self.observation_space.dtype)
+        if num_stack!=1:
+            low = np.repeat(self.observation_space.low[np.newaxis, ...], num_stack, axis=0)
+            high = np.repeat(self.observation_space.high[np.newaxis, ...], num_stack, axis=0)
+            self.observation_space = Box(low=low, high=high, dtype=self.observation_space.dtype)
 
     def observation(self, observation):
-        return np.array(self.frames)
-        # return list(self.frames)
-    
+        if self.num_stack!=1:
+            return np.array(self.frames)
+        else:
+            return self.frames[0]
+        
     def step(self, action):
         total_reward = 0
         for _ in range(self.num_skip):
@@ -78,7 +80,7 @@ class SkipStackObservation(gym.ObservationWrapper): # env_wrapper.BufferedObsEnv
             total_reward += reward
             if terminated or truncated:
                 break
-        self.frames.append(observation.copy()) # copy
+        self.frames.append(observation)
             
         return self.observation(None), total_reward, terminated, truncated, info
     
@@ -97,6 +99,7 @@ if __name__ == '__main__':
         obs, info = env.reset()
         for step in range(200):
             action = env.action_space.sample()
+            action = 1
             obs, reward, terminated, truncated, info = env.step(action)
             if terminated or truncated or info['flag_get']:
                 break
