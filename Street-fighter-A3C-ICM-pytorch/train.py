@@ -31,7 +31,7 @@ def get_args():
     parser.add_argument("--max_actions", type=int, default=500, help="Maximum repetition steps in test phase")
     parser.add_argument("--log_path", type=str, default="tensorboard/a3c_icm_street_fighter")
     parser.add_argument("--saved_path", type=str, default="trained_models")
-    parser.add_argument("--use_gpu", type=bool, default=False)
+    parser.add_argument("--use_gpu", type=bool, default=True)
     args = parser.parse_args()
     return args
 
