@@ -21,8 +21,9 @@ def local_train(index, opt, global_model, global_icm, optimizer, save=False):
         start_time = timeit.default_timer()
     writer = SummaryWriter(opt.log_path)
     # env, num_states, num_actions = create_train_env(index+1)
-    env, num_states, num_actions = create_mario()
-    local_model = ActorCritic(4, num_actions)
+    env, _, num_actions = create_mario()
+    num_actions = 12
+    local_model = ActorCritic(4, num_actions) #num_actions = 12
     # local_icm = IntrinsicCuriosityModule(num_states, num_actions)
     if opt.use_gpu:
         local_model.cuda()

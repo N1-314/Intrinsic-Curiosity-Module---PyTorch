@@ -16,6 +16,7 @@ from torch.distributions import Categorical
 import sys, os
 sys.path.append(os.path.abspath('/home/yeeun/Intrinsic-Curiosity-Module---PyTorch/Street-fighter-A3C-ICM-pytorch'))
 from src.model import ActorCritic
+from mario_env import create_mario_env
 
 
 def create_mario(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_video = True):
@@ -101,9 +102,10 @@ class SkipStackObservation(gym.ObservationWrapper):
         return self.observation(None), info
 
 if __name__ == '__main__':
-    env,_,num_actions = create_mario()
+    # env,_,num_actions = create_mario()
+    env = create_mario_env()
     PATH = '/home/yeeun/Intrinsic-Curiosity-Module---PyTorch/trained_models/a3c_mario'
-    model = ActorCritic(4,num_actions)
+    model = ActorCritic(4,12)
     model.load_state_dict(torch.load(PATH))
     model.eval()
 
