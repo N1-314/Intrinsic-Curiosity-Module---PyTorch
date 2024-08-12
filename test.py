@@ -18,7 +18,6 @@ def get_args():
     parser.add_argument('--seed', type=int, default=42, help='random seed')
 
     parser.add_argument('--saved_path', type=str, default='trained_models', help='path saved global nets')
-    parser.add_argument('--output_path', type=str, default='output', help='path to save output')
     
     args = parser.parse_args()
     return args
@@ -37,11 +36,12 @@ def test(arg):
     state, *_ = env.reset()
     state = torch.from_numpy(state)
     termin, trunc = False, False
+    lstm_h, lstm_c = 0,0
 
     while True:
-        logits, _ = model(state)
+        logits, _, lstm_h, lstm_c = model(state, lstm_h, lstm_c)
         policy = F.softmax(logits)
-        action = Categorical(policy).sample().item()
+        action = torch.argmax(policy).item()    # greedy selection
         next_state, _, termin, trunc, _ = env.step(action)
         state = torch.from_numpy(next_state)
 

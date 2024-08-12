@@ -41,7 +41,7 @@ def train(arg):
         os.makedirs(arg.save_path)
     mp = _mp.get_context("spawn")
 
-    global_model = ActorCritic(1, 12)
+    global_model = ActorCritic(1, 5)
     global_model.share_memory()
 
     optimizer = Adam(params = global_model.parameters(), lr = arg.lr)
