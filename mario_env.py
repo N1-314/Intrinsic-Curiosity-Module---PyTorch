@@ -104,7 +104,8 @@ class RecordFrames(gym.Wrapper):
         self.total_reward = 0
 
     def step(self, action):
-        observation, reward, terminated, truncated, info = self.env.step(action)
+        raw_observation, reward, terminated, truncated, info = self.env.step(action)
+        observation = raw_observation.copy()
         self.total_reward += reward
         if self.record and self.show_joystick:
             if self.show_joystick:
@@ -115,7 +116,7 @@ class RecordFrames(gym.Wrapper):
             self.record_frames.append(observation.copy())
             info['n_frames'] = len(self.record_frames)
 
-        return observation, reward, terminated, truncated, info
+        return raw_observation, reward, terminated, truncated, info
     
     def reset(self, **kwargs):
         observation, info = self.env.reset(**kwargs)
