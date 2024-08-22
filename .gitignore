@@ -1,3 +1,10 @@
+train
+test_chan
+Street-fighter-A3C-ICM-pytorch
+.vscode/
+trained_models
+runs
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -8,6 +8,7 @@ from collections import deque
 import numpy as np
 import cv2
 from PIL import Image, ImageDraw, ImageFont
+import torch
 from utils import create_video
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -32,6 +33,76 @@ def create_mario_env(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_v
     env = SkipStackObservation(env, num_skip=num_skip, num_stack=4)
 
     return env
+
+class MarioPolicyShow():
+    def __init__(self, actions):
+        self.actions = actions
+    
+    def draw(self, action, policy):
+        policy_image = Image.new('RGBA', (100, 50), color=(255, 255, 255, 50))
+        draw = ImageDraw.Draw(policy_image)
+
+        if isinstance(policy, np.ndarray):
+            policy = policy.flatten()
+        elif isinstance(policy, torch.Tensor):
+            policy = policy.detach().numpy().flatten()
+
+        action_index = action
+        num_action = len(policy)
+        max_index = policy.argmax().item()
+        max_value = policy.max().item()
+
+        entropy = -(policy * np.log(policy + 1e-10)).sum()
+
+        # num_action * box_width + (num_action+1) * box_offset + 2*side_offset = policy_image.size[0]
+        side_offset = 0
+        box_offset = 3
+        y_offset = 6
+        y_offset_top = 0
+
+        box_width = (policy_image.size[0] - (num_action-1)*box_offset - 2*side_offset) / num_action
+        y_offset_rev = policy_image.size[1] - y_offset - y_offset_top
+        y_ratio = y_offset_rev / max(policy)
+
+        x_start = side_offset
+        for i, prob in enumerate(policy):
+            draw.rectangle(
+                [x_start, y_offset_top+y_offset_rev - prob*y_ratio, x_start + box_width, y_offset_rev],
+                fill='orange' if i == max_index else '#1f77b4',
+                outline=(255, 0, 0, 255) if i == action_index else (0, 0, 0, 255),
+                width=2 if i == action_index else 1
+            )
+            draw.text((x_start, y_offset_rev+1), str(i), font=ImageFont.load_default(size=5), align='right')
+
+            x_start += box_width + box_offset
+
+        # text = f"entropy:\n{entropy:.2f}"
+        text = f"{entropy:.2f}"
+        font=ImageFont.load_default(size=15)
+        bbox = draw.textbbox((0, 0), text, font=font, align='right')
+        draw.text((policy_image.size[0]-(bbox[2]-bbox[0]), 0), text, font=font, fill=(0,0,0,255), align='right')
+
+        return policy_image
+    
+    def __call__(self, obs, action, policy):
+        if policy is None:
+            return obs
+        else:
+            overlay = np.array(self.draw(action, policy))
+            # overlay = cv2.resize(overlay, dsize=(0,0), fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)
+            height, width, c = overlay.shape
+            
+            x_offset, y_offset = obs.shape[1]-overlay.shape[1]-10, 30
+            y1, y2 = y_offset, y_offset + height
+            x1, x2 = x_offset, x_offset + width
+
+            alpha_overlay = overlay[:, :, 3] / 255.0
+            alpha_background = 1.0 - alpha_overlay
+
+            for c in range(3):
+                obs[y1:y2, x1:x2, c] = (alpha_overlay * overlay[:, :, c] + alpha_background * obs[y1:y2, x1:x2, c])
+
+            return obs.copy()
 
 class MarioJoystick():
     def __init__(self, actions):
@@ -100,28 +171,42 @@ class RecordFrames(gym.Wrapper):
         self.show_joystick = True if actions is not None else False
         if self.show_joystick:
             self.joystick = MarioJoystick(actions)
+            self.policy_show = MarioPolicyShow(actions)
+            self.policy = None
+            self.time_step = None
         self.record = True
         self.total_reward = 0
 
+    def set_record(self, record):
+        self.record = record
+
+    def set_record_info(self, policy, time_step=None):
+        self.policy = policy
+        self.time_step = time_step
+
     def step(self, action):
-        observation, reward, terminated, truncated, info = self.env.step(action)
+        raw_observation, reward, terminated, truncated, info = self.env.step(action)
+        observation = raw_observation.copy()
         self.total_reward += reward
         if self.record and self.show_joystick:
             if self.show_joystick:
                 observation = self.joystick(observation, action)
+                observation = self.policy_show(observation, action, self.policy)
                 cv2.putText(observation, f"x_pos: {info['x_pos']}", (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 cv2.putText(observation, f"reward: {reward}", (10, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 cv2.putText(observation, f"total_reward: {self.total_reward}", (10, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                cv2.putText(observation, f"step: {self.time_step}", (175, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
             self.record_frames.append(observation.copy())
             info['n_frames'] = len(self.record_frames)
 
-        return observation, reward, terminated, truncated, info
+        return raw_observation, reward, terminated, truncated, info
     
     def reset(self, **kwargs):
         observation, info = self.env.reset(**kwargs)
         self.record_frames.clear()
         self.record_frames.append(observation.copy())
         self.total_reward = 0
+        self.policy = None
 
         return observation, info
     
@@ -152,6 +237,8 @@ class SkipStackObservation(gym.ObservationWrapper):
         total_reward = 0
         for _ in range(self.num_skip):
             observation, reward, terminated, truncated, info = self.env.step(action)
+            # cv2.imshow('skipstack', observation)
+            # cv2.waitKey(1)
             total_reward += reward
             if terminated or truncated:
                 break
