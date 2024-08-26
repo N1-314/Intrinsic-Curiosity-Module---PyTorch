@@ -1,9 +1,9 @@
 train
-test_chan
 Street-fighter-A3C-ICM-pytorch
 .vscode/
 trained_models
 runs
+*.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
