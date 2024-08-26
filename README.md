@@ -1,5 +1,7 @@
 # Curiosity-driven Exploration by Self-supervised Prediction
 
+![image](https://nesmaps.com/maps/SuperMarioBrothers/SuperMarioBrosMap1-1.png)
+
 [Curiosity-driven Exploration by Self-supervised Prediction](https://arxiv.org/abs/1705.05363) 논문의 PyTorch 구현입니다.
 Linux 환경에서 개발하였습니다.
 
