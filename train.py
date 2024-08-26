@@ -141,6 +141,8 @@ def worker(rank, global_model, global_icm, optimizer, args):
             
             env.set_record_info(policy.detach().cpu().numpy().flatten().copy(), 0) if rank == 0 else None # call before env.step
             next_obs, reward, terminated, truncated, info = env.step(action)
+            if args.use_icm:
+                reward = 0
             next_obs = torch_obs(next_obs, device)
 
             action_onehot = torch.zeros((1, num_actions)).to(device)
@@ -193,6 +195,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
 
         optimizer.zero_grad()
         model.zero_grad()
+        icm.zero_grad()
         total_loss.backward()
         for local_param, global_param in zip(model.parameters(), global_model.parameters()):
             if global_param.grad is not None:
