@@ -78,6 +78,29 @@ class ActorCritic(nn.Module):
 
         return action.item(), policy, hx, cx
     
+    def f(self, x, hx=None): # for captum
+        if x.dim() == 3:
+            x = x.unsqueeze(0)
+        x = self.univers_head(x)
+        hx, cx = self.lstm(x, hx)
+        
+        # Critic
+        value = self.value(hx)
+
+        # Actor
+        logit = self.logit(hx)
+        policy = F.softmax(logit, dim=-1) # policy: probs
+
+        # log_policy = torch.log(policy + 1e-10)
+        log_policy = F.log_softmax(logit, dim=-1)
+        entropy = -(policy * log_policy).sum(1, keepdim=True)
+
+        m = Categorical(probs=policy)
+        action = m.sample()#.item()
+        log_prob = m.log_prob(action) # log_policy[0, action] == m.log_prob(action)
+
+        return policy
+    
 class ICM(nn.Module):
     def __init__(self, env):
         super().__init__()
