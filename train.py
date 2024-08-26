@@ -195,7 +195,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
 
         optimizer.zero_grad()
         model.zero_grad()
-        icm.zero_grad()
+        icm.zero_grad() if icm else None
         total_loss.backward()
         for local_param, global_param in zip(model.parameters(), global_model.parameters()):
             if global_param.grad is not None:
