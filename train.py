@@ -140,7 +140,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
                 writer.add_scalar('train/x_pos', info['x_pos'], curr_episode)
                 writer.add_scalar('train/score', info['score'], curr_episode)
                 writer.add_scalar('train/prev_score', prev_score, curr_episode)
-                if curr_episode-1 % 5 == 0:
+                if (curr_episode-1 % 5) == 0:
                     frames = np.stack(env.record_frames, axis=0)
                     frames = frames.transpose(0, 3, 1, 2)
                     frames = np.expand_dims(frames, axis=0)
@@ -155,6 +155,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
             episode_intrinsic_return = 0
             episode_extrinsic_return = 0
             curr_step = 0
+            prev_score = 0
             curr_episode += 1
         else:
             hx = hx.detach()
@@ -279,7 +280,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
 
         # writer.add_scalar(f'loss/total/{rank}', total_loss.item(), local_update_num)
 
-        if global_update_num-1 % 5000 == 0:
+        if (global_update_num-1 % 5000) == 0:
             writer.add_image('frame', np.hstack([*obs.cpu().numpy()]), global_update_num, dataformats='HW')
 
         # print(f'rank: {rank}, step: {update_num}, local_step: {i}')
