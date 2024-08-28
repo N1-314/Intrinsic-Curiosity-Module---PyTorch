@@ -83,11 +83,11 @@ def evaluation(global_model, training_step, best, tb_log, args):
     best_reward, best_x_pos = best
     if total_reward > best_reward:
         best[0] = total_reward
-        torch.save(global_model.state_dict(), f'{args.saved_path}/best_model_{int(best_reward)}.pt')
+        torch.save(model.state_dict(), f'{args.saved_path}/best_model_{int(best_reward)}.pt')
         print(f'saved best model with reward: {best_reward}')
     if info['x_pos'] > best_x_pos:
         best[1] = info['x_pos']
-        torch.save(global_model.state_dict(), f"{args.saved_path}/best_model_x_pos_{int(info['x_pos'])}.pt")
+        torch.save(model.state_dict(), f"{args.saved_path}/best_model_x_pos_{int(info['x_pos'])}.pt")
         print(f"saved best model with x_pos: {info['x_pos']}")
 
     return best
@@ -138,12 +138,16 @@ def worker(rank, global_model, global_icm, optimizer, args):
                 writer.add_scalar('train/intrinsic_return', episode_intrinsic_return, curr_episode)
                 writer.add_scalar('train/extrinsic_return', episode_extrinsic_return, curr_episode)
                 writer.add_scalar('train/x_pos', info['x_pos'], curr_episode)
-                if curr_episode % 10 == 0:
+                writer.add_scalar('train/score', info['score'], curr_episode)
+                writer.add_scalar('train/prev_score', prev_score, curr_episode)
+                if curr_episode-1 % 5 == 0:
                     frames = np.stack(env.record_frames, axis=0)
                     frames = frames.transpose(0, 3, 1, 2)
                     frames = np.expand_dims(frames, axis=0)
                     writer.add_video('video/train', frames, curr_episode, fps=30)
-            writer.flush()
+                if args.use_icm and rank == 0 and curr_episode-1 % 10 == 0:
+                    torch.save(global_icm.state_dict(), f"{args.saved_path}/icm_x_pos_{int(info['x_pos'])}.pt")
+                writer.flush()
 
             obs, info = env.reset()
             obs = torch_obs(obs, device)
@@ -165,13 +169,13 @@ def worker(rank, global_model, global_icm, optimizer, args):
             
             env.set_record_info(policy.detach().cpu().numpy().flatten().copy(), 0) if rank == 0 else None # call before env.step
             next_obs, reward, terminated, truncated, info = env.step(action)
-            if args.use_icm:
-                # no reward
+            if args.no_reward:
                 reward = 0
-                if args.use_sparse_reward:
-                    if info['score'] > prev_score:
-                        reward = info['score'] - prev_score
-                        prev_score = info['score']
+            if args.use_sparse_reward:
+                reward = 0
+                if info['score'] > prev_score:
+                    reward = info['score'] - prev_score
+                    prev_score = info['score']
                 
             next_obs = torch_obs(next_obs, device)
 
@@ -354,6 +358,7 @@ def get_args():
     # parser.add_argument("--use_gpu", type=bool, default=True)
     # parser.add_argument("--use_shared_optim", type=bool, default=True)
     parser.add_argument("--use_icm", type=bool, default=False)
+    parser.add_argument("--no_reward", type=bool, default=False)
     parser.add_argument("--use_sparse_reward", type=bool, default=True)
     parser.add_argument("--process_name", type=str, default=f'{getpass.getuser()}/Mario')
     parser.add_argument("--global_device", type=str, default="cpu")
@@ -398,6 +403,7 @@ if __name__ == '__main__':
 
     os.makedirs(args.saved_path, exist_ok=True)
     setproctitle(args.process_name + '+main')
+    args.main_pid = os.getpid()
     writer = SummaryWriter(f'runs/{args.log_path}')
     writer.add_text('args', str(vars(args)))
     writer.close()
