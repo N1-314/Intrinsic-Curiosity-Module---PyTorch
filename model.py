@@ -134,3 +134,19 @@ class ICM(nn.Module):
         return self.inverse_net(torch.cat([state_ft, next_state_ft], dim=1)),\
                self.forward_net(torch.cat([state_ft, action], dim=1)),\
                next_state_ft
+    
+    def forward_detach(self, state, next_state, action):
+        if state.dim() == 3:
+            state = state.unsqueeze(0)
+        if next_state.dim() == 3:
+            next_state = next_state.unsqueeze(0)
+            
+        state_ft = self.conv(state).view(-1, self.feature_size)
+        next_state_ft = self.conv(next_state).view(-1, self.feature_size)
+        
+        return self.inverse_net(torch.cat([state_ft, next_state_ft], dim=1)),\
+               self.forward_net(torch.cat([state_ft.detach(), action], dim=1)),\
+               next_state_ft
+    
+    def f(self, state): # for captum
+        return self.conv(state)

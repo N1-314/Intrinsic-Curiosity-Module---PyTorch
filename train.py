@@ -39,7 +39,7 @@ def evaluation(global_model, training_step, best, tb_log, args):
     walltime = time.time()
 
     env = create_mario_env()
-    env.record = (training_step % 1000 == 0)
+    env.record = (training_step % 5_000 == 0)
     model = ActorCritic(env)
     model.eval()
     model.load_state_dict(global_model.state_dict())
@@ -81,11 +81,11 @@ def evaluation(global_model, training_step, best, tb_log, args):
     tb_log.put(data)
 
     best_reward, best_x_pos = best
-    if total_reward > best_reward:
+    if total_reward >= best_reward:
         best[0] = total_reward
         torch.save(model.state_dict(), f'{args.saved_path}/best_model_{int(best_reward)}.pt')
         print(f'saved best model with reward: {best_reward}')
-    if info['x_pos'] > best_x_pos:
+    if info['x_pos'] >= best_x_pos:
         best[1] = info['x_pos']
         torch.save(model.state_dict(), f"{args.saved_path}/best_model_x_pos_{int(info['x_pos'])}.pt")
         print(f"saved best model with x_pos: {info['x_pos']}")
@@ -133,6 +133,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
             hx = torch.zeros((1, 256), dtype=torch.float32).to(device)
             cx = torch.zeros((1, 256), dtype=torch.float32).to(device)
 
+            writer.add_scalar(f"info/episode_worker_{rank}", curr_episode, curr_episode)
             if rank == 0 and curr_episode > 0:
                 writer.add_scalar('train/return', episode_return, curr_episode)
                 writer.add_scalar('train/intrinsic_return', episode_intrinsic_return, curr_episode)
@@ -140,12 +141,12 @@ def worker(rank, global_model, global_icm, optimizer, args):
                 writer.add_scalar('train/x_pos', info['x_pos'], curr_episode)
                 writer.add_scalar('train/score', info['score'], curr_episode)
                 writer.add_scalar('train/prev_score', prev_score, curr_episode)
-                if (curr_episode-1 % 5) == 0:
+                if (curr_episode-1) % 5 == 0:
                     frames = np.stack(env.record_frames, axis=0)
                     frames = frames.transpose(0, 3, 1, 2)
                     frames = np.expand_dims(frames, axis=0)
                     writer.add_video('video/train', frames, curr_episode, fps=30)
-                if args.use_icm and rank == 0 and curr_episode-1 % 10 == 0:
+                if args.use_icm and rank == 0 and (curr_episode-1) % 10 == 0:
                     torch.save(global_icm.state_dict(), f"{args.saved_path}/icm_x_pos_{int(info['x_pos'])}.pt")
                 writer.flush()
 
@@ -177,6 +178,8 @@ def worker(rank, global_model, global_icm, optimizer, args):
                 if info['score'] > prev_score:
                     reward = info['score'] - prev_score
                     prev_score = info['score']
+                if info['flag_get']:
+                    reward += info['time'] * 50 
                 
             next_obs = torch_obs(next_obs, device)
 
@@ -184,11 +187,16 @@ def worker(rank, global_model, global_icm, optimizer, args):
             action_onehot[0, action] = 1
 
             if icm:
-                pred_logits, pred_phi, phi = icm(obs, next_obs, action_onehot) # inverse, forward, next_state
+                if not args.use_detach:
+                    pred_logits, pred_phi, phi = icm(obs, next_obs, action_onehot) # inverse, forward, next_state
+                else:
+                    pred_logits, pred_phi, phi = icm.forward_detach(obs, next_obs, action_onehot) # inverse, forward, next_state
 
             inv_loss = inv_criteria(pred_logits, torch.tensor([action], dtype=torch.long).to(device)) if icm else 0
-            # fwd_loss = fwd_criteria(pred_phi, phi) / 2 if icm else 0 # or fwd_loss = fwd_criteria(pred_phi, phi.detach())
-            fwd_loss = fwd_loss = fwd_criteria(pred_phi, phi.detach()) / 2 if icm else 0
+            if not args.use_detach:
+                fwd_loss = fwd_criteria(pred_phi, phi) / 2 if icm else 0 # 
+            else:
+                fwd_loss = fwd_criteria(pred_phi, phi.detach()) / 2 if icm else 0 # if forward model이 icm.conv를 학습하지 않는다면 phi.detach()와 icm.forward_detach() 사용
                 
             intrinsic_reward = args.eta * fwd_loss.detach() if icm else 0
             episode_intrinsic_return += intrinsic_reward
@@ -242,8 +250,8 @@ def worker(rank, global_model, global_icm, optimizer, args):
                 if global_param.grad is not None:
                     break
                 global_param.grad = local_param.grad.to(args.global_device)
-        torch.nn.utils.clip_grad_norm_(global_model.parameters(), 5)
-        torch.nn.utils.clip_grad_norm_(global_icm.parameters(), 5) if icm else None
+        torch.nn.utils.clip_grad_norm_(global_model.parameters(), 40)
+        torch.nn.utils.clip_grad_norm_(global_icm.parameters(), 40) if icm else None
         optimizer.step()
         
         # LOGGING
@@ -259,7 +267,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
 
         writer.add_scalar(f'loss/total', total_loss.item(), global_update_num)
 
-        LOGGING_GRAD = True
+        LOGGING_GRAD = False
         if LOGGING_GRAD:
             for name, param in model.named_parameters():
                 writer.add_histogram(name, param.grad, global_update_num)
@@ -280,8 +288,9 @@ def worker(rank, global_model, global_icm, optimizer, args):
 
         # writer.add_scalar(f'loss/total/{rank}', total_loss.item(), local_update_num)
 
-        if (global_update_num-1 % 5000) == 0:
+        if (global_update_num-1 % 100_000) == 0:
             writer.add_image('frame', np.hstack([*obs.cpu().numpy()]), global_update_num, dataformats='HW')
+            
 
         # print(f'rank: {rank}, step: {update_num}, local_step: {i}')
         # EVERY EPISODE
@@ -293,6 +302,7 @@ class DummyEnv:
 
 def tb_logging(tb_log, args):
     setproctitle(args.process_name + '+eval_tb')
+    print(f'tb_logging pid: {os.getpid()}')
     writer = SummaryWriter(f'runs/{args.log_path}')
     waiting_data = []
     log_step = 0
@@ -365,6 +375,8 @@ def get_args():
     parser.add_argument("--global_device", type=str, default="cpu")
     parser.add_argument("--local_device", type=str, default="cuda:0")
     parser.add_argument("--my_text", type=str, default="only_gpu, shared_optim")
+
+    parser.add_argument("--use_detach", type=bool, default=False)
     args = parser.parse_args()
     return args
 
@@ -401,6 +413,7 @@ if __name__ == '__main__':
     mp.set_start_method('spawn')
     args = get_args()
     print(args)
+    input()
 
     os.makedirs(args.saved_path, exist_ok=True)
     setproctitle(args.process_name + '+main')
