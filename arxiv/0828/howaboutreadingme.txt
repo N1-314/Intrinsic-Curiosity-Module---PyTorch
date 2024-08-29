@@ -1,0 +1,52 @@
+based on commit 1998c0e2b7db72cfa814e038e14fb69527a531c0
+
+- LSTM layer를 1개로 수정
+- gae 계산을 torch.no_grad로
+- local_model.zero_grad() 추가!!!!
+- CNN 구조를 희찬,예ㅖ은과 맞춤 -> policy dimsntion 변경
+- entropy 계산할 때 sum(2, keepdim=True) 해줌
+- global로 올릴 때 if is not None을 다시 켜봄..
+
+
+--lr 0.0001 --tau 1.0 --num_local_steps 50 --num_global_steps 100000000 --save_interval 500
+
+0822 : 돌리다가 컴 꺼짐 ㅠㅠ
+0826 : 0822에서 이어서 학습함.
+
+텐서보드의 가로축 : 각 worker의 cur_experience
+weight 파일의 이름 : 모든 4개의 worker가, cur_experience가 save_interval의 배수가 될 때마다 global 모델을 저장함. 따라서 weight 파일은 4개 중 진행이 가장 늦은 worker 기준 global 모델임.
+weight 파일의 구성 : {
+                    "global_model_state_dict" : global_model.state_dict(),
+                    "optimizer_state_dict" : optimizer.state_dict(),
+                    }
+                    (process.py의 L139-143 참고)
+
+==
+
+그래프를 보면 알겠지만 160K 이상에서는 깃대 잘 잡음.
+test 결과도 그러함.
+
+근데 action repeat을 꺼버리면..
+160K   : 594
+170K   : 594
+180K   : 679
+185K   : 315
+188K   : 594
+189K   : 315
+189.5K : 315
+190K   : 1516
+190.5K : 700
+191K   : 714
+192K   : 722
+195K   : 722
+200K   : 594
+210K   : 434
+229.5K : 722
+230K   : 1153
+230.5K : 698
+240K   : 898
+270K   : 722
+279.5K : 722
+280K   : 1130
+280.5K : 722
+290K   : 679

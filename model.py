@@ -56,28 +56,31 @@ class ActorCritic(nn.Module):
         super(ActorCritic, self).__init__()
 
         self.num_lstm_unit = 256
+        self.num_lstm_layer = 1
+
         self.conv = BaseConv(c_in)
         self.lstm = nn.LSTM(input_size=self.conv.output_size,
                             hidden_size=self.num_lstm_unit,
-                            num_layers=4,
+                            num_layers=self.num_lstm_layer,
                             batch_first=True,
                             )
             # Inputs
-            #   - input: (N,L,Hin) : [1, 4, 288]
+            #   - input: (N,L,Hin) : [1, 1, 288]
             #   - h_0, c_0 : same as h_n, c_n
             # Outputs
-            #   - h_n: (D*num_layers, N, Hout) : [4, 1, 256]
-            #   - c_n: (D*num_layers, N, Hcell) : [4, 1, 256]
+            #   - h_n: (D*num_layers, N, Hout) : [1, 1, 256]
+            #   - c_n: (D*num_layers, N, Hcell) : [1, 1, 256]
         self.critic = nn.Linear(self.num_lstm_unit, 1)
         self.actor = nn.Linear(self.num_lstm_unit, num_actions)
     
     def forward(self, x, h0, c0):
-        x = self.conv(x)    # x.shape == torch.Size([4, 32, 3, 3])
+        x = self.conv(x)
+        # x.shape changed from torch.Size([4, 42, 42]) to torch.Size([32, 3, 3])
 
         if isinstance(h0, int):
-            h0 = torch.zeros((4, 1, self.num_lstm_unit))
+            h0 = torch.zeros((self.num_lstm_layer, 1, self.num_lstm_unit))    # == (1,1,-1)
         if isinstance(c0, int):
-            c0 = torch.zeros((4, 1, self.num_lstm_unit))
+            c0 = torch.zeros((self.num_lstm_layer, 1, self.num_lstm_unit))    # == (1,1,-1)
     
-        _, (hn, cn) = self.lstm(x.view(1, x.size(0), -1), (h0, c0))
-        return self.actor(hn[-1]), self.critic(hn[-1]), hn, cn
+        _, (hn, cn) = self.lstm(x.view(1, 1, -1), (h0, c0))     # x.flatten?
+        return self.actor(hn), self.critic(hn), hn, cn

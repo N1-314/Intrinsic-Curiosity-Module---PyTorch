@@ -28,12 +28,14 @@ def get_args():
 
     parser.add_argument('--save_interval', type=int, default=50, help='the number of horizons between savings')
     parser.add_argument('--save_path', type=str, default='trained_models', help='path to save global nets')
+    parser.add_argument("--log_path", type=str, default="tensorboard/a3c_mario_")
 
     args = parser.parse_args()
     return args
 
 def train(arg):
     print(time.ctime(time.time()))
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
 
     torch.manual_seed(arg.seed)
 
@@ -41,14 +43,23 @@ def train(arg):
         os.makedirs(arg.save_path)
     mp = _mp.get_context("spawn")
 
-    global_model = ActorCritic(1, 5)
-    global_model.share_memory()
+    num_stack = 4
+    num_actions = 5 # RIGHT_ONLY
+    global_model = ActorCritic(num_stack, num_actions)
 
     optimizer = Adam(params = global_model.parameters(), lr = arg.lr)
     processes = []
 
+    concat_info = None
+    #### Do you want to train from the last point??
+    # concat_info = {'cur_experience':71500}
+    # path_detail = f"a3c_mario_20240822_105334/{concat_info['cur_experience']}"
+    # global_model.load_state_dict(torch.load(f"{arg.save_path}/{path_detail}")["global_model_state_dict"])
+    # optimizer.load_state_dict(torch.load(f"{arg.save_path}/{path_detail}")["optimizer_state_dict"])
+    ####
+
     for index in range(arg.num_processes):
-        process = mp.Process(target = local_train, args=(index, arg, global_model, optimizer))
+        process = mp.Process(target = local_train, args=(index, timestamp, arg, global_model, optimizer, concat_info), daemon=True)
         process.start()
         processes.append(process)
     for process in processes:

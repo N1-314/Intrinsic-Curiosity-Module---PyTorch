@@ -15,7 +15,7 @@ warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-def create_mario(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_video = True):
+def create_mario(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_video = True, num_skip=6, num_stack=4):
     gray_scale = not color_env
     ## Initialize Super Mario environment
     if gym.__version__ < '0.26':
@@ -29,9 +29,9 @@ def create_mario(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_video
     env = JoypadSpace(env, RIGHT_ONLY)    # "we reparametrize the action space of the agent into 12 unique actions"
     env = ResizeObservation(env, shape=42) # ndim을 3으로 만들기에 GrayScale이전에 사용
     if gray_scale:
-        env = GrayScaleObservation(env, keep_dim=True)     # "The input RGB images are converted into gray-scale"
-    env = TorchStyleObservation(env)
-    env = SkipStackObservation(env, num_skip=6, num_stack=4)
+        env = GrayScaleObservation(env, keep_dim=False)     # "The input RGB images are converted into gray-scale"
+    env = Div255Observation(env)
+    env = SkipStackObservation(env, num_skip=num_skip, num_stack=num_stack)
 
     return env
 
@@ -59,16 +59,12 @@ class RecordFrames(gym.Wrapper):
         print(f'[save video] saved: {name}, frames length: {len(self.record_frames)}, fps: {fps}')
 
 
-class TorchStyleObservation(gym.ObservationWrapper):
-    '''
-    Convert (H, W, C) to (C, H, W)
-    https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html#conv2d
-    ''' 
+class Div255Observation(gym.ObservationWrapper):
     def __init__(self, env: gym.Env):
         super().__init__(env)
     
     def observation(self, observation: np.ndarray):
-        return np.transpose(observation/255, (2,0,1))
+        return observation/255
 
 
 class SkipStackObservation(gym.ObservationWrapper): # env_wrapper.BufferedObsEnv
