@@ -121,6 +121,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
     fwd_criteria = nn.MSELoss()
 
     terminated = truncated = True
+    total_step = 0
     curr_step = 0
     curr_episode = 0
     prev_score = 0
@@ -140,7 +141,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
                 writer.add_scalar('train/extrinsic_return', episode_extrinsic_return, curr_episode)
                 writer.add_scalar('train/x_pos', info['x_pos'], curr_episode)
                 writer.add_scalar('train/score', info['score'], curr_episode)
-                writer.add_scalar('train/prev_score', prev_score, curr_episode)
+                # writer.add_scalar('train/prev_score', prev_score, curr_episode)
                 if (curr_episode-1) % 5 == 0:
                     frames = np.stack(env.record_frames, axis=0)
                     frames = frames.transpose(0, 3, 1, 2)
@@ -166,6 +167,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
         values, log_probs, rewards, entropies = [], [], [], []
         inv_losses, fwd_losses = [], []
         for i in range(args.num_local_steps):
+            total_step += 1
             curr_step += 1
             action, value, log_prob, entropy, policy, hx, cx = model(obs, (hx, cx))
             
@@ -212,6 +214,9 @@ def worker(rank, global_model, global_icm, optimizer, args):
             fwd_losses.append(fwd_loss)
 
             obs = next_obs
+
+            # from tensorboard.backend.event_processing import event_accumulator 으로 로그 읽고 후처리 용
+            writer.add_scalars(f'db/{rank}', {'x_pos': info['x_pos'], 'y_pos': info['y_pos'], 'curiosity': intrinsic_reward, 'action': action}, total_step)
             if terminated or truncated:
                 break
 
