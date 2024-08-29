@@ -48,16 +48,16 @@ Linux 환경에서 개발하였습니다.
         | `right`, `A`      | Jump right            |
         | `right`, `B`      | Run right             |
         | `right`, `A`, `B` | Run & jump right      |
-        |
+        | | |
         | `A`               | Jump                  |
         | `left`            | Walk left             |
-        |
+        | | |
         | `left`, `A`       | Jump left             |
         | `left`, `B`       | Run left              |
         | `left`, `A`, `B`  | Run & jump left       |
         | `down`            | Crouch                |
         | `up`              | Climb                 |
-        |
+        
 
     1. 각종 wrapper들
 
