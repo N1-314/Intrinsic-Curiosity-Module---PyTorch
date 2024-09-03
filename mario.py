@@ -26,7 +26,7 @@ def create_mario(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_video
     if save_video:
         env = RecordFrames(env)
     
-    env = JoypadSpace(env, RIGHT_ONLY)    # "we reparametrize the action space of the agent into 12 unique actions"
+    env = JoypadSpace(env, SIMPLE_MOVEMENT)    # "we reparametrize the action space of the agent into 12 unique actions"
     env = ResizeObservation(env, shape=42) # ndim을 3으로 만들기에 GrayScale이전에 사용
     if gray_scale:
         env = GrayScaleObservation(env, keep_dim=False)     # "The input RGB images are converted into gray-scale"

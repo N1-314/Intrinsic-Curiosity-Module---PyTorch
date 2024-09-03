@@ -44,7 +44,7 @@ def train(arg):
     mp = _mp.get_context("spawn")
 
     num_stack = 4
-    num_actions = 5 # RIGHT_ONLY
+    num_actions = 7 # SIMPLE_MOVEMENT
     global_model = ActorCritic(num_stack, num_actions)
 
     optimizer = Adam(params = global_model.parameters(), lr = arg.lr)

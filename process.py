@@ -36,6 +36,7 @@ def local_train(index:int, timestamp:str, arg, global_model, optimizer, concat:d
     state, *_ = env.reset()
     state = torch.from_numpy(state)
     cur_step, cur_experience = 0,0
+    cnt_episode = 0
     termin, trunc = False, False
     lstm_h, lstm_c = 0,0
 
@@ -80,6 +81,7 @@ def local_train(index:int, timestamp:str, arg, global_model, optimizer, concat:d
             ret = torch.zeros((1, 1), dtype=torch.float)
             next_state, *_ = env.reset()
             cur_step = 0
+            cnt_episode += 1
             # termin, trunc = False, False
             lstm_h, lstm_c = 0,0
         
@@ -112,6 +114,7 @@ def local_train(index:int, timestamp:str, arg, global_model, optimizer, concat:d
         writer.add_scalar(f"Process_{index}/actor", actor_loss, cur_experience)
         writer.add_scalar(f"Process_{index}/critic", critic_loss, cur_experience)
         writer.add_scalar(f"Process_{index}/entropy", entropy_loss, cur_experience)
+        writer.add_scalar(f"Process_{index}/cnt_episode", cnt_episode, cur_experience)
 
         optimizer.zero_grad()
         local_model.zero_grad()
@@ -131,14 +134,14 @@ def local_train(index:int, timestamp:str, arg, global_model, optimizer, concat:d
                 # 대표로 하나만 출력
                 print(f"Process {index}. Experience {cur_experience}. Loss {loss[0].item():.2f} (Actor: {actor_loss[0].item():.5f}, critic: {critic_loss:.5f}, Entropy: {entropy_loss.item():.5f})")
                 
-            # save for real-time test
-            torch.save(global_model.state_dict(), f"{arg.save_path}/a3c_mario")
+                # save for real-time test
+                torch.save(global_model.state_dict(), f"{arg.save_path}/a3c_mario")
 
-            # Checkpoint
-            torch.save({
-                "global_model_state_dict" : global_model.state_dict(),
-                "optimizer_state_dict" : optimizer.state_dict(),
-                }, f=f"{arg.save_path}/a3c_mario_{timestamp}/{cur_experience}")
+                # Checkpoint
+                torch.save({
+                    "global_model_state_dict" : global_model.state_dict(),
+                    "optimizer_state_dict" : optimizer.state_dict(),
+                    }, f=f"{arg.save_path}/a3c_mario_{timestamp}/{cur_experience}")
 
         if cur_experience == arg.num_global_steps // arg.num_local_steps:
             print(f"Process #{index} has been ended.")

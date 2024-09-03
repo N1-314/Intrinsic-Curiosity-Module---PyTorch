@@ -1,0 +1,41 @@
+based on Commit: 69a924bd2e0091bd4fd605b14889baec173fed60
+
+- RIGHT_ONLY (5) 대신 SIMPLE_MOVEMENT (7) 로.
+- episode 개수를 찍어봄. optimizer의 작동 횟수와 episode 반복 횟수 간의 관계를 알아보기 위해.
+
+--lr 0.0001 --tau 1.0 --num_local_steps 50 --num_global_steps 100000000 --save_interval 500
+
+
+앞서 (0829) compelex COMPLEX_MOVEMENT로 3일이나 돌렸음에도 학습이 하나도 안 되길래
+일단 SIMPLE_MOVEMENT로 진행..
+
+
+요약:
+right_only와 비슷한 수준으로 수렴함.
+살짝 빠르지만 거의 차이 없다고 보면 될듯.
+complex는 왜 안되는거지?
+
+텐서보드의 가로축 : 각 worker의 cur_experience
+weight 파일의 이름 : 0번째 worker가, cur_experience가 save_interval의 배수가 될 때마다 global 모델을 저장함.
+weight 파일의 구성 : {
+                    "global_model_state_dict" : global_model.state_dict(),
+                    "optimizer_state_dict" : optimizer.state_dict(),
+                    }
+cnt_episode 그래프 : 
+(0, 0) ~ (80K, 40K) : 기울기 1/2 : 2개의 episode의 데이터를 갖고 optimizer 1번 작동
+(80K, 40K) ~ (200K, 70K) : 기울기 1/4 : 4개의 episode의 데이터를 갖고 optimizer 1번 작동.
+-- 얼추 일리 있음. 아래의 test 실행 결과를 보면 action repeat 6일 때 200개의 action selection을 진행하면 goal에 도착하는데, 지금 num_local_steps가 50이므로..
+
+loss가 0으로 거의 수렴한 150K에서
+repeat 6, argmax일 때 : 성공 (176 step)
+repeat 6, categorical, seed 42일 때: 성공 (202 step)
+repeat 1, argmax일 때 : 실패 (x = 594)
+repeat 1, categorical, seed 42일 때: 실패 (x = 594)
+(웃긴 점: 쌩 random으로 해도 594까지는 감 ㅋㅋ)
+
+episode 길이가 현저하게 달라진 후인 90K에서
+repeat 6, argmax일 때 : 아깝게 실패 (x = 2850, step 200~)
+repeat 6, categorical, seed 42일 때: 성공ㄷㄷ (206 step)
+repeat 1, argmax일 때 : 실패 (x = 315)
+repeat 1, categorical, seed 42일 때: 실패 (x = 315)
+나름.. 괜찮다..?
