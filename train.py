@@ -32,7 +32,7 @@ class SharedAdam(optim.Adam):
 def torch_obs(obs, device='cpu'):
     return torch.from_numpy(obs).contiguous().to(torch.get_default_dtype()).div(255).to(device)
 
-def evaluation(global_model, training_step, best, tb_log, args):
+def evaluation(global_model, global_icm, training_step, best, tb_log, args):
     torch.manual_seed(123)
     # writer = SummaryWriter(f'runs/{args.log_path}')
     setproctitle(args.process_name + f'+eval_{training_step}')
@@ -40,17 +40,21 @@ def evaluation(global_model, training_step, best, tb_log, args):
 
     env = create_mario_env()
     env.record = (training_step % 5_000 == 0)
-    model = ActorCritic(env)
+    model = ActorCritic(env, args.action_lstm)
     model.eval()
     model.load_state_dict(global_model.state_dict())
+    if global_icm:
+        icm = ICM(env)
+        icm.load_state_dict(global_icm.state_dict())
 
     hx = torch.zeros((1, 256), dtype=torch.float32)
     cx = torch.zeros((1, 256), dtype=torch.float32)
+    action = 0
     total_reward = 0
 
     obs, info = env.reset()
     for local_step in count():
-        action, policy, hx, cx = model.get_action(torch_obs(obs), (hx, cx))
+        action, policy, hx, cx = model.get_action(torch_obs(obs), (hx, cx), action)
         env.set_record_info(policy.detach().cpu().numpy().flatten().copy(), local_step)
         obs, reward, terminated, truncated, info = env.step(action)
         total_reward += reward
@@ -84,10 +88,14 @@ def evaluation(global_model, training_step, best, tb_log, args):
     if total_reward >= best_reward:
         best[0] = total_reward
         torch.save(model.state_dict(), f'{args.saved_path}/best_model_{int(best_reward)}.pt')
+        if global_icm:
+            torch.save(icm.state_dict(), f'{args.saved_path}/best_icm_{int(best_reward)}.pt')
         print(f'saved best model with reward: {best_reward}')
     if info['x_pos'] >= best_x_pos:
         best[1] = info['x_pos']
         torch.save(model.state_dict(), f"{args.saved_path}/best_model_x_pos_{int(info['x_pos'])}.pt")
+        if global_icm:
+            torch.save(icm.state_dict(), f"{args.saved_path}/best_icm_x_pos_{int(info['x_pos'])}.pt")
         print(f"saved best model with x_pos: {info['x_pos']}")
 
     return best
@@ -110,7 +118,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
     else:
         device = f'cuda:{rank%2+2}' # for 2, 3
 
-    model = ActorCritic(env).to(device)
+    model = ActorCritic(env, args.action_lstm).to(device)
     model.train()
     icm = None
     if args.use_icm:
@@ -125,6 +133,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
     curr_step = 0
     curr_episode = 0
     prev_score = 0
+    action = 0
 
     for local_update_num in count():
         model.load_state_dict(global_model.state_dict())
@@ -147,8 +156,6 @@ def worker(rank, global_model, global_icm, optimizer, args):
                     frames = frames.transpose(0, 3, 1, 2)
                     frames = np.expand_dims(frames, axis=0)
                     writer.add_video('video/train', frames, curr_episode, fps=30)
-                if args.use_icm and rank == 0 and (curr_episode-1) % 10 == 0:
-                    torch.save(global_icm.state_dict(), f"{args.saved_path}/icm_x_pos_{int(info['x_pos'])}.pt")
                 writer.flush()
 
             obs, info = env.reset()
@@ -169,7 +176,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
         for i in range(args.num_local_steps):
             total_step += 1
             curr_step += 1
-            action, value, log_prob, entropy, policy, hx, cx = model(obs, (hx, cx))
+            action, value, log_prob, entropy, policy, hx, cx = model(obs, (hx, cx), action)
             
             env.set_record_info(policy.detach().cpu().numpy().flatten().copy(), 0) if rank == 0 else None # call before env.step
             next_obs, reward, terminated, truncated, info = env.step(action)
@@ -216,7 +223,11 @@ def worker(rank, global_model, global_icm, optimizer, args):
             obs = next_obs
 
             # from tensorboard.backend.event_processing import event_accumulator 으로 로그 읽고 후처리 용
-            writer.add_scalars(f'db/{rank}', {'x_pos': info['x_pos'], 'y_pos': info['y_pos'], 'curiosity': intrinsic_reward, 'action': action}, total_step)
+            writer.add_scalar(f'db/{rank}/x_pos', info['x_pos'], total_step)
+            writer.add_scalar(f'db/{rank}/y_pos', info['y_pos'], total_step)
+            writer.add_scalar(f'db/{rank}/fwd_loss', fwd_loss, total_step)
+            writer.add_scalar(f'db/{rank}/inv_loss', inv_loss, total_step)
+            writer.add_scalar(f'db/{rank}/action', action, total_step)
             if terminated or truncated:
                 break
 
@@ -293,7 +304,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
 
         # writer.add_scalar(f'loss/total/{rank}', total_loss.item(), local_update_num)
 
-        if (global_update_num-1 % 100_000) == 0:
+        if (global_update_num-1) % 100_000 == 0:
             writer.add_image('frame', np.hstack([*obs.cpu().numpy()]), global_update_num, dataformats='HW')
             
 
@@ -337,7 +348,7 @@ def tb_logging(tb_log, args):
             log_step += 100
         time.sleep(1)
 
-def loop_evaluation(global_model, optimizer, args):
+def loop_evaluation(global_model, global_icm, optimizer, args):
     training_step = 0
     # best_reward = sys.float_info.min
     # best_x_pos = 0
@@ -348,7 +359,7 @@ def loop_evaluation(global_model, optimizer, args):
     mp.Process(target=tb_logging, args=(tb_log, args), daemon=True).start()
     while True:
         if training_step <= optimizer.state_dict()['state'][0]['step']:
-            mp.Process(target=evaluation, args=(global_model, training_step, best, tb_log, args), daemon=True).start()
+            mp.Process(target=evaluation, args=(global_model, global_icm, training_step, best, tb_log, args), daemon=True).start()
             training_step += 100
         time.sleep(0.5)
 
@@ -382,13 +393,14 @@ def get_args():
     parser.add_argument("--my_text", type=str, default="only_gpu, shared_optim")
 
     parser.add_argument("--use_detach", type=bool, default=False)
+    parser.add_argument("--action_lstm", type=bool, default=False)
     args = parser.parse_args()
     return args
 
 def train(args):
     torch.manual_seed(123)
 
-    global_model = ActorCritic(DummyEnv()).to(args.global_device)
+    global_model = ActorCritic(DummyEnv(), args.action_lstm).to(args.global_device)
     if args.use_icm:
         global_icm = ICM(DummyEnv()).to(args.global_device)
         optimizer = SharedAdam(list(global_model.parameters())+list(global_icm.parameters()), lr=args.lr)
@@ -406,7 +418,7 @@ def train(args):
     # evaluation
     # eval = mp.Process(target=loop_evaluation, args=(global_model, optimizer, args), daemon=True)
     # eval.start()
-    loop_evaluation(global_model, optimizer, args)
+    loop_evaluation(global_model, global_icm, optimizer, args)
     
     for process in processes:
         process.join()
@@ -418,7 +430,7 @@ if __name__ == '__main__':
     mp.set_start_method('spawn')
     args = get_args()
     print(args)
-    input()
+    input('Check args and Press enter to continue')
 
     os.makedirs(args.saved_path, exist_ok=True)
     setproctitle(args.process_name + '+main')

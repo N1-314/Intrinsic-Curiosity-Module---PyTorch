@@ -17,10 +17,26 @@ class UniversalHead(nn.Module):
         return self.univers_head(x)
 
 class ActorCritic(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, action_lstm=False):
         super().__init__()
         inputs = env.observation_space.shape[0]
         # self.is_discrete = env.action_space.__class__.__name__ == 'Discrete'
+
+        self.action_lstm = action_lstm
+        self.emb_action = [ # COMPLEX_MOVEMENT
+            [0,0,0,0,0,0],
+            [0,0,0,1,0,0],
+            [0,0,0,1,1,0],
+            [0,0,0,1,0,1],
+            [0,0,0,1,1,1],
+            [0,0,0,0,1,0],
+            [0,0,1,0,0,0],
+            [0,0,1,0,1,0],
+            [0,0,1,0,0,1],
+            [0,0,1,0,1,1],
+            [0,1,0,0,0,0],
+            [1,0,0,0,0,0]
+        ]
 
         action_dim = env.action_space.n
         units = 256
@@ -36,17 +52,24 @@ class ActorCritic(nn.Module):
         )
 
         # The output of the last convolution layer is fed into a LSTM with 256 units.
-        self.lstm = nn.LSTMCell(32*3*3, hidden_size=units)
+        if action_lstm:
+            self.lstm = nn.LSTMCell(32*3*3 + len(self.emb_action[0]), hidden_size=units)
+        else:
+            self.lstm = nn.LSTMCell(32*3*3, hidden_size=units)
 
         # Two separate fully connected layers are used to predict the value function and the action from the LSTM feature representation.
         self.value = nn.Linear(units, 1)
         self.logit = nn.Linear(units, action_dim)
-    
+
+
         
-    def forward(self, x, hx=None):
+    def forward(self, x, hx=None, action=0):
         if x.dim() == 3:
             x = x.unsqueeze(0)
         x = self.univers_head(x)
+        if self.action_lstm:
+            x = torch.cat((x, torch.tensor([self.emb_action[action]], device=x.device)), dim=-1)
+
         hx, cx = self.lstm(x, hx)
         
         # Critic
@@ -67,10 +90,13 @@ class ActorCritic(nn.Module):
         return action.item(), value, log_prob, entropy, policy, hx, cx
         
     @torch.no_grad()
-    def get_action(self, x, hx=None):
+    def get_action(self, x, hx=None, action=0):
         if x.dim() == 3:
             x = x.unsqueeze(0)
         x = self.univers_head(x)
+        if self.action_lstm:
+            x = torch.cat((x, torch.tensor([self.emb_action[action]])), dim=-1)
+
         hx, cx = self.lstm(x, hx)
         logit = self.logit(hx)
         policy = F.softmax(logit, dim=-1)
