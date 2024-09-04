@@ -22,8 +22,8 @@ weight 파일의 구성 : {
                     "optimizer_state_dict" : optimizer.state_dict(),
                     }
 cnt_episode 그래프 : 
-(0, 0) ~ (80K, 40K) : 기울기 1/2 : 2개의 episode의 데이터를 갖고 optimizer 1번 작동
-(80K, 40K) ~ (200K, 70K) : 기울기 1/4 : 4개의 episode의 데이터를 갖고 optimizer 1번 작동.
+(0, 0) ~ (80K, 40K) : 기울기 1/2 : 1/2개의 episode의 데이터를 갖고 optimizer 1번 작동
+(80K, 40K) ~ (200K, 70K) : 기울기 1/4 : 1/4개의 episode의 데이터를 갖고 optimizer 1번 작동.
 -- 얼추 일리 있음. 아래의 test 실행 결과를 보면 action repeat 6일 때 200개의 action selection을 진행하면 goal에 도착하는데, 지금 num_local_steps가 50이므로..
 
 loss가 0으로 거의 수렴한 150K에서
