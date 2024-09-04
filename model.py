@@ -17,26 +17,35 @@ class UniversalHead(nn.Module):
         return self.univers_head(x)
 
 class ActorCritic(nn.Module):
-    def __init__(self, env, action_lstm=False):
+    def __init__(self, env, action_lstm=False, actions=""):
         super().__init__()
         inputs = env.observation_space.shape[0]
         # self.is_discrete = env.action_space.__class__.__name__ == 'Discrete'
 
         self.action_lstm = action_lstm
-        self.emb_action = [ # COMPLEX_MOVEMENT
-            [0,0,0,0,0,0],
-            [0,0,0,1,0,0],
-            [0,0,0,1,1,0],
-            [0,0,0,1,0,1],
-            [0,0,0,1,1,1],
-            [0,0,0,0,1,0],
-            [0,0,1,0,0,0],
-            [0,0,1,0,1,0],
-            [0,0,1,0,0,1],
-            [0,0,1,0,1,1],
-            [0,1,0,0,0,0],
-            [1,0,0,0,0,0]
-        ]
+        if actions == 'RIGHT_ONLY':
+            self.emb_action = [
+                [0,0,0,0,0,0],
+                [0,0,0,1,0,0],
+                [0,0,0,1,1,0],
+                [0,0,0,1,0,1],
+                [0,0,0,1,1,1]
+            ]
+        else:
+            self.emb_action = [ # COMPLEX_MOVEMENT
+                [0,0,0,0,0,0],
+                [0,0,0,1,0,0],
+                [0,0,0,1,1,0],
+                [0,0,0,1,0,1],
+                [0,0,0,1,1,1],
+                [0,0,0,0,1,0],
+                [0,0,1,0,0,0],
+                [0,0,1,0,1,0],
+                [0,0,1,0,0,1],
+                [0,0,1,0,1,1],
+                [0,1,0,0,0,0],
+                [1,0,0,0,0,0]
+            ]
 
         action_dim = env.action_space.n
         units = 256

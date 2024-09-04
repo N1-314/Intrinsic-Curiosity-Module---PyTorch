@@ -38,9 +38,9 @@ def evaluation(global_model, global_icm, training_step, best, tb_log, args):
     setproctitle(args.process_name + f'+eval_{training_step}')
     walltime = time.time()
 
-    env = create_mario_env()
+    env = create_mario_env(actions=args.actions)
     env.record = (training_step % 5_000 == 0)
-    model = ActorCritic(env, args.action_lstm)
+    model = ActorCritic(env, args.action_lstm, args.actions)
     model.eval()
     model.load_state_dict(global_model.state_dict())
     if global_icm:
@@ -109,7 +109,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
 
     writer = SummaryWriter(f'runs/{args.log_path}')
     
-    env = create_mario_env()
+    env = create_mario_env(actions=args.actions)
     env.set_record(rank == 0)
     num_actions = env.action_space.n
     
@@ -118,7 +118,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
     else:
         device = f'cuda:{rank%2+2}' # for 2, 3
 
-    model = ActorCritic(env, args.action_lstm).to(device)
+    model = ActorCritic(env, args.action_lstm, args.actions).to(device)
     model.train()
     icm = None
     if args.use_icm:
@@ -312,9 +312,14 @@ def worker(rank, global_model, global_icm, optimizer, args):
         # EVERY EPISODE
 
 class DummyEnv:
-    def __init__(self):
+    def __init__(self, args=None):
+        if args:
+            if args.actions == 'RIGHT_ONLY':
+                n = 5
+            else:
+                n = 12
         self.observation_space = np.empty((4, 42, 42))
-        self.action_space = type('ActionSpace', (object,), {'n':12})() # 임의의 클래스를 인스턴스화
+        self.action_space = type('ActionSpace', (object,), {'n':n})() # 임의의 클래스를 인스턴스화
 
 def tb_logging(tb_log, args):
     setproctitle(args.process_name + '+eval_tb')
@@ -394,15 +399,16 @@ def get_args():
 
     parser.add_argument("--use_detach", type=bool, default=False)
     parser.add_argument("--action_lstm", type=bool, default=False)
+    parser.add_argument("--actions", type=str, default="")
     args = parser.parse_args()
     return args
 
 def train(args):
     torch.manual_seed(123)
 
-    global_model = ActorCritic(DummyEnv(), args.action_lstm).to(args.global_device)
+    global_model = ActorCritic(DummyEnv(args), args.action_lstm, args.actions).to(args.global_device)
     if args.use_icm:
-        global_icm = ICM(DummyEnv()).to(args.global_device)
+        global_icm = ICM(DummyEnv(args)).to(args.global_device)
         optimizer = SharedAdam(list(global_model.parameters())+list(global_icm.parameters()), lr=args.lr)
     else:
         global_icm = None

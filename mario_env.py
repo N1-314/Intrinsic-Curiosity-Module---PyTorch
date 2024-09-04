@@ -14,7 +14,7 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-def create_mario_env(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_video = True, test=False):
+def create_mario_env(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_video = True, test=False, actions=""):
     if test:
         num_skip = 1
     else:
@@ -26,8 +26,12 @@ def create_mario_env(env_id = "SuperMarioBros-1-1-v0", color_env = False, save_v
     else:
         env = gym.make(env_id, apply_api_compatibility=True)
     # wrap the environment
-    env = JoypadSpace(env, COMPLEX_MOVEMENT) # "we reparametrize the action space of the agent into 14 unique actions"
-    env = RecordFrames(env, COMPLEX_MOVEMENT) if save_video else env
+    if actions == 'RIGHT_ONLY':
+        ACTIONS = RIGHT_ONLY
+    else:
+        ACTIONS = COMPLEX_MOVEMENT
+    env = JoypadSpace(env, ACTIONS) # "we reparametrize the action space of the agent into 14 unique actions"
+    env = RecordFrames(env, ACTIONS) if save_video else env
     env = ResizeObservation(env, shape=42) # ndim을 3으로 만들기에 GrayScale이전에 사용
     env = GrayScaleObservation(env, keep_dim=False) if gray_scale else env # "The input RGB images are converted into gray-scale"
     env = SkipStackObservation(env, num_skip=num_skip, num_stack=4)
