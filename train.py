@@ -39,7 +39,7 @@ def evaluation(global_model, global_icm, training_step, best, tb_log, args):
     walltime = time.time()
 
     env = create_mario_env(actions=args.actions)
-    env.record = (training_step % 5_000 == 0)
+    env.record = (training_step % 100_000 == 0)
     model = ActorCritic(env, args.action_lstm, args.actions)
     model.eval()
     model.load_state_dict(global_model.state_dict())
@@ -108,6 +108,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
     print(f'rank: {rank}, pid: {pid}')
 
     writer = SummaryWriter(f'runs/{args.log_path}')
+    writer_video = SummaryWriter(f'runs/{args.log_path}')
     
     env = create_mario_env(actions=args.actions)
     env.set_record(rank == 0)
@@ -134,6 +135,8 @@ def worker(rank, global_model, global_icm, optimizer, args):
     curr_episode = 0
     prev_score = 0
     action = 0
+    is_underground = False
+    prev_x_pos = 40
 
     for local_update_num in count():
         model.load_state_dict(global_model.state_dict())
@@ -151,11 +154,11 @@ def worker(rank, global_model, global_icm, optimizer, args):
                 writer.add_scalar('train/x_pos', info['x_pos'], curr_episode)
                 writer.add_scalar('train/score', info['score'], curr_episode)
                 # writer.add_scalar('train/prev_score', prev_score, curr_episode)
-                if (curr_episode-1) % 5 == 0:
+                if (curr_episode-1) % 500 == 0:
                     frames = np.stack(env.record_frames, axis=0)
                     frames = frames.transpose(0, 3, 1, 2)
                     frames = np.expand_dims(frames, axis=0)
-                    writer.add_video('video/train', frames, curr_episode, fps=30)
+                    writer_video.add_video('video/train', frames, curr_episode, fps=30)
                 writer.flush()
 
             obs, info = env.reset()
@@ -165,6 +168,8 @@ def worker(rank, global_model, global_icm, optimizer, args):
             episode_extrinsic_return = 0
             curr_step = 0
             prev_score = 0
+            is_underground = False
+            prev_x_pos = 40
             curr_episode += 1
         else:
             hx = hx.detach()
@@ -188,7 +193,14 @@ def worker(rank, global_model, global_icm, optimizer, args):
                     reward = info['score'] - prev_score
                     prev_score = info['score']
                 if info['flag_get']:
-                    reward += info['time'] * 50 
+                    reward += info['time'] * 50
+            # check if mario is underground
+            x_pos = info['x_pos']
+            if prev_x_pos >= 800 and x_pos <= 30: #(898~942) to (24)
+                is_underground = True
+            if is_underground and x_pos >= 2000: # (194) to (2616)
+                is_underground = False
+            prev_x_pos = x_pos
                 
             next_obs = torch_obs(next_obs, device)
 
@@ -228,6 +240,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
             writer.add_scalar(f'db/{rank}/fwd_loss', fwd_loss, total_step)
             writer.add_scalar(f'db/{rank}/inv_loss', inv_loss, total_step)
             writer.add_scalar(f'db/{rank}/action', action, total_step)
+            writer.add_scalar(f'db/{rank}/underground', int(is_underground), total_step)
             if terminated or truncated:
                 break
 
@@ -305,7 +318,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
         # writer.add_scalar(f'loss/total/{rank}', total_loss.item(), local_update_num)
 
         if (global_update_num-1) % 100_000 == 0:
-            writer.add_image('frame', np.hstack([*obs.cpu().numpy()]), global_update_num, dataformats='HW')
+            writer_video.add_image('frame', np.hstack([*obs.cpu().numpy()]), global_update_num, dataformats='HW')
             
 
         # print(f'rank: {rank}, step: {update_num}, local_step: {i}')
@@ -325,6 +338,7 @@ def tb_logging(tb_log, args):
     setproctitle(args.process_name + '+eval_tb')
     print(f'tb_logging pid: {os.getpid()}')
     writer = SummaryWriter(f'runs/{args.log_path}')
+    writer_video = SummaryWriter(f'runs/{args.log_path}')
     waiting_data = []
     log_step = 0
 
@@ -348,7 +362,7 @@ def tb_logging(tb_log, args):
             writer.add_scalar('eval/x_pos', data['x_pos'], step, walltime)
             writer.add_histogram('eval/x_pos_hist', data['x_pos'], step, walltime=walltime)
             if data['frames'] is not None:
-                writer.add_video('video/eval', data['frames'], step, fps=30, walltime=walltime)
+                writer_video.add_video('video/eval', data['frames'], step, fps=30, walltime=walltime)
             writer.flush()
             log_step += 100
         time.sleep(1)
