@@ -4,6 +4,8 @@ Street-fighter-A3C-ICM-pytorch
 trained_models
 runs
 *.ipynb
+*.pkl
+discussion
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
