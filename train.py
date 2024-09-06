@@ -136,6 +136,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
     prev_score = 0
     action = 0
     is_underground = False
+    underground_img = None
     prev_x_pos = 40
 
     for local_update_num in count():
@@ -154,6 +155,8 @@ def worker(rank, global_model, global_icm, optimizer, args):
                 writer.add_scalar('train/x_pos', info['x_pos'], curr_episode)
                 writer.add_scalar('train/score', info['score'], curr_episode)
                 # writer.add_scalar('train/prev_score', prev_score, curr_episode)
+                if underground_img is not None:
+                    writer_video.add_image('underground', underground_img, curr_episode, dataformats='HWC')
                 if (curr_episode-1) % 500 == 0:
                     frames = np.stack(env.record_frames, axis=0)
                     frames = frames.transpose(0, 3, 1, 2)
@@ -169,6 +172,7 @@ def worker(rank, global_model, global_icm, optimizer, args):
             curr_step = 0
             prev_score = 0
             is_underground = False
+            underground_img = None
             prev_x_pos = 40
             curr_episode += 1
         else:
@@ -194,10 +198,14 @@ def worker(rank, global_model, global_icm, optimizer, args):
                     prev_score = info['score']
                 if info['flag_get']:
                     reward += info['time'] * 50
+
             # check if mario is underground
             x_pos = info['x_pos']
             if prev_x_pos >= 800 and x_pos <= 30: #(898~942) to (24)
                 is_underground = True
+                if rank == 0:
+                    underground_img = np.hstack(env.record_frames[-4*8-1::6]) # action repeat 6
+                    underground_img= np.vstack([underground_img[:,:1536//2], underground_img[:,1536//2:]])
             if is_underground and x_pos >= 2000: # (194) to (2616)
                 is_underground = False
             prev_x_pos = x_pos
